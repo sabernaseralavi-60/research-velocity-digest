@@ -62,7 +62,8 @@ jobs:
           ARGS=""
           if [ -n "$TOPIC" ]; then ARGS="$ARGS --topic \"$TOPIC\""; fi
           if [ -n "$DAYS" ]; then ARGS="$ARGS --days $DAYS"; fi
-          eval python -m pipeline.daily $ARGS
+          # one retry after 10 minutes: OpenAlex budgets per shared runner IP can be exhausted transiently
+          eval python -m pipeline.daily $ARGS || { echo "first attempt failed, retrying in 10 minutes"; sleep 600; eval python -m pipeline.daily $ARGS; }
       - name: Publish SQLite snapshot
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
