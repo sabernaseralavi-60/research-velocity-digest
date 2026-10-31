@@ -74,3 +74,6 @@ Hardened, pushed (CI green incl. browser e2e), verified on a local production bu
 - Workflow: one retry after 10 min added. Chrome: the dashboard URL appended to the Desktop shortcut "Seyedsaber - Chrome.lnk" (profile 4) via `scripts/install_chrome_tab.ps1` (undo with -Remove); Chrome settings untouched because startup prefs are integrity-protected and a policy would replace the owner's own startup tabs. Start-menu shortcut (ProgramData) needs admin: not changed.
 - Startup shortcut run by hand: sync + server OK.
 - Only owner-only item left: free OpenAlex key (needs the owner's e-mail/account) - optional hardening; runs work keyless so far.
+
+## 2026-10-31 (night) - OpenAlex key
+- Owner gave the free OpenAlex API key in chat; stored ONLY as GitHub secret OPENALEX_API_KEY (never in files/commits). Keyed probe HTTP 200, limit 10,000 credits / USD 1 per day. Workflow run 41230345614 (days=5, keyed) green.
