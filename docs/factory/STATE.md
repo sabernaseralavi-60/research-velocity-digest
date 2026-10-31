@@ -77,3 +77,6 @@ Hardened, pushed (CI green incl. browser e2e), verified on a local production bu
 
 ## 2026-10-31 (night) - OpenAlex key
 - Owner gave the free OpenAlex API key in chat; stored ONLY as GitHub secret OPENALEX_API_KEY (never in files/commits). Keyed probe HTTP 200, limit 10,000 credits / USD 1 per day. Workflow run 41230345614 (days=5, keyed) green.
+
+## 2026-10-31 - owner decision: local only, no web app
+- Owner: stop pursuing the public web app (Vercel/Neon); the product is the local dashboard fed by the daily GitHub Action. Vercel/Neon files (vercel.json, api for Postgres) stay in the repo but are unused. Chrome startup page: owner sets http://localhost:4791 in chrome://settings/onStartup (then remove the shortcut tweak with scripts/install_chrome_tab.ps1 -Remove to avoid a double tab).
