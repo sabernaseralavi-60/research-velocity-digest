@@ -61,3 +61,10 @@ Hardened, pushed (CI green incl. browser e2e), verified on a local production bu
 - Not bypassed: no new team/account, no reuse of the other projects' Neon databases (not authorised for this project).
 - Nothing was created in the cloud. No secrets set (no DATABASE_URL to store yet).
 - Owner options: (a) resolve the block with Vercel (vercel.link/fair-use; upgrade or appeal), then say "ادامه" -> link, Neon, deploy; (b) approve a Vercel-free host (e.g. free Neon account created by owner + Render/Fly/GitHub Pages static snapshot) - needs a decision because it changes the architecture.
+
+## 2026-10-31 (later) - owner decision: local viewing + daily run in the cloud (GitHub), no Vercel/Neon for now
+- Owner: "local app opened as a Chrome startup tab; do NOT run the daily job on my PC; cloud daily on GitHub is great".
+- Built: `daily_ingest.yml` SQLite mode (restore/publish `data-latest` release asset when DATABASE_URL is empty; Postgres mode unchanged), `scripts/sync_db.mjs`, `scripts/start_local.ps1`, `start-local.cmd`, `scripts/install_autostart.ps1` (Startup shortcut installed on the owner's PC), SQLite opened per query so the file can be replaced while the server runs. Local port 4791 (4173 is held by a VS Code Pylance process on this PC).
+- Verified: workflow run 41211010626 green (cloud: 9,068 papers, 299,256 edges, 3 topics, 6 snapshots; asset 11.6 MB); snapshot downloaded and served locally, dashboard screenshot shows the cloud data, no console errors.
+- Not verified: the scheduled (cron) run itself; second-day incremental run on the cloud; keyless OpenAlex over many days on shared runner IPs; Chrome startup tab (owner sets it in Chrome settings).
+- Public web app (Vercel + Neon) stays on hold until the Vercel fair-use block is resolved.

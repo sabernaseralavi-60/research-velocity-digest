@@ -30,6 +30,21 @@ npm run build && SQLITE_PATH=output/research_velocity.db ADMIN_TOKEN=choose-one 
 npm run e2e          # needs a fixture DB: python scripts/make_fixture_db.py output/e2e.db
 ```
 
+## Cloud-only mode without a hosted database (current setup)
+
+The daily GitHub Action needs no server of yours and no Neon/Vercel: when the `DATABASE_URL` secret is empty it restores the SQLite database from the rolling release `data-latest`, ingests the new day, and publishes the file back (about 12 MB gzipped after the first 30-day backfill; OpenAlex metadata is CC0, nothing is committed to git). Your PC only **views** the result:
+
+```powershell
+powershell -File scripts\install_autostart.ps1     # once: at every Windows login, download the latest snapshot and start the dashboard (hidden)
+start-local.cmd                                     # or by hand; opens http://localhost:4791
+```
+
+Then in Chrome: Settings > On startup > Open a specific page > add `http://localhost:4791`. The dashboard needs the PC to be on only when you look at it; the data keeps growing in the cloud every day. Remove the autostart with `install_autostart.ps1 -Remove`.
+
+* New topics: add them to `config/topics.default.json` and push, or run the workflow by hand ("Run workflow" > topic). Editing topics in the dashboard needs `ADMIN_TOKEN` and is for a hosted database.
+* Add the free `OPENALEX_API_KEY` repository secret for reliable daily runs (Settings > Secrets and variables > Actions).
+* Logs of the local launcher: `output/local_server.log`, `output/server.err.log`.
+
 ## Configuration (environment)
 
 | Variable | Used by | Purpose |
