@@ -53,3 +53,11 @@ Hardened, pushed (CI green incl. browser e2e), verified on a local production bu
 ## Verified vs not verified (short; full table in VERIFIED.md)
 - Verified (facts run on baseline clone): `python -m unittest pipeline.test_pipeline` 4 tests OK; `npm install` (plain) FAILS with ERESOLVE (peer vite@8 vs esbuild 0.25).
 - Not verified yet: build, TS lint, tsx tests, any live OpenAlex run, every number in the spec's "live screenshot" section.
+
+## 2026-10-31 (after owner phrase "fix everything and run it") - SHIP BLOCKED BY VERCEL ACCOUNT
+- Owner gave the go-ahead phrase. `vercel whoami` = sabernaseralavi-60, team saber11 (SaberNaseralavi), `gh` logged in.
+- `vercel link` / `vercel project add` / `vercel integration add neon` all fail: "Your Team exceeded our fair use limits and has been blocked. (402)".
+- Existing sites of the same team (trafficlab, silp-web, ham-masir) also return HTTP 402 when fetched -> the whole team is blocked, not only this project.
+- Not bypassed: no new team/account, no reuse of the other projects' Neon databases (not authorised for this project).
+- Nothing was created in the cloud. No secrets set (no DATABASE_URL to store yet).
+- Owner options: (a) resolve the block with Vercel (vercel.link/fair-use; upgrade or appeal), then say "ادامه" -> link, Neon, deploy; (b) approve a Vercel-free host (e.g. free Neon account created by owner + Render/Fly/GitHub Pages static snapshot) - needs a decision because it changes the architecture.
