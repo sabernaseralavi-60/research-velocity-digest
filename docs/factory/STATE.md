@@ -81,4 +81,4 @@ Hardened, pushed (CI green incl. browser e2e), verified on a local production bu
 ## 2026-10-31 - owner decision: local only, no web app
 - Owner: stop pursuing the public web app (Vercel/Neon); the product is the local dashboard fed by the daily GitHub Action. Vercel/Neon files (vercel.json, api for Postgres) stay in the repo but are unused. Chrome startup page: owner sets http://localhost:4791 in chrome://settings/onStartup (then remove the shortcut tweak with scripts/install_chrome_tab.ps1 -Remove to avoid a double tab).
 
-- Correction: the Chrome shortcut URL override REPLACED the owner's startup tabs; removed again (shortcut args back to --profile-directory="Profile 4"). Chrome startup is now governed only by Chrome settings (chrome://settings/onStartup). Lesson WAF-20261031-40.
+- Correction: the Chrome shortcut URL override REPLACED the owner's startup tabs; removed again (shortcut args back to --profile-directory="Profile 4"). Chrome startup is now governed only by Chrome settings (chrome://settings/onStartup). Lesson WAF-20261031-51.
