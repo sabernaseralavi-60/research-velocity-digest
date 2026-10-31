@@ -614,7 +614,7 @@ export function getAllCandidateHydratedWorks(): RawPaper[] {
  */
 export async function fetchRecentPapersOpenAlex(
   lookbackDays: number = 7,
-  politeEmail: string = 'saber.naseralavi@gmail.com',
+  politeEmail: string = '',
   useLiveNetwork: boolean = false
 ): Promise<RawPaper[]> {
   if (!useLiveNetwork) {
@@ -631,30 +631,27 @@ export async function fetchRecentPapersOpenAlex(
   url.searchParams.set('filter', `from_publication_date:${startStr},to_publication_date:${endStr},concepts.id:C154945302|C119857082|C108827166,has_references:true`);
   url.searchParams.set('select', 'id,title,publication_date,publication_year,authorships,primary_topic,referenced_works,doi');
   url.searchParams.set('per-page', '50');
-  url.searchParams.set('mailto', politeEmail);
+  if (politeEmail) url.searchParams.set('mailto', politeEmail);
 
+  // Live mode never substitutes the synthetic fixture: a failure is surfaced to the caller (F-003).
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
     const resp = await fetch(url.toString(), {
       signal: controller.signal,
-      headers: {
-        'Accept': 'application/json',
-      },
+      headers: { Accept: 'application/json' },
     });
-    clearTimeout(timeout);
-
-    if (resp.ok) {
-      const data = await resp.json();
-      if (Array.isArray(data.results) && data.results.length > 0) {
-        return data.results;
-      }
+    if (!resp.ok) {
+      throw new Error(`OpenAlex answered HTTP ${resp.status}`);
     }
-  } catch (err) {
-    console.warn('Live OpenAlex fetch failed or timed out, using fallback benchmark dataset', err);
+    const data = await resp.json();
+    if (!Array.isArray(data.results)) {
+      throw new Error('OpenAlex returned an unexpected payload');
+    }
+    return data.results;
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return SEED_RECENT_PAPERS;
 }
 
 /**
@@ -662,7 +659,7 @@ export async function fetchRecentPapersOpenAlex(
  */
 export async function hydrateWorksOpenAlex(
   workIds: string[],
-  politeEmail: string = 'saber.naseralavi@gmail.com',
+  politeEmail: string = '',
   useLiveNetwork: boolean = false
 ): Promise<RawPaper[]> {
   const resolved: RawPaper[] = [];
@@ -677,22 +674,24 @@ export async function hydrateWorksOpenAlex(
   }
 
   if (missingIds.length > 0 && useLiveNetwork) {
-    try {
-      const cleanIds = missingIds.map(id => id.split('/').pop()).filter(Boolean);
+    const cleanIds = missingIds.map((id) => id.split('/').pop()).filter(Boolean) as string[];
+    // OpenAlex accepts at most 50 ids per `|` filter; chunk to stay below the URL and filter limits.
+    for (let i = 0; i < cleanIds.length; i += 40) {
+      const chunk = cleanIds.slice(i, i + 40);
       const url = new URL('https://api.openalex.org/works');
-      url.searchParams.set('filter', `openalex_id:${cleanIds.join('|')}`);
+      url.searchParams.set('filter', `openalex_id:${chunk.join('|')}`);
+      url.searchParams.set('per-page', String(chunk.length));
       url.searchParams.set('select', 'id,title,publication_year,publication_date,authorships,primary_topic,cited_by_count,doi,abstract_inverted_index');
-      url.searchParams.set('mailto', politeEmail);
+      if (politeEmail) url.searchParams.set('mailto', politeEmail);
 
       const resp = await fetch(url.toString());
-      if (resp.ok) {
-        const data = await resp.json();
-        if (Array.isArray(data.results)) {
-          resolved.push(...data.results);
-        }
+      if (!resp.ok) {
+        throw new Error(`OpenAlex answered HTTP ${resp.status} while hydrating works`);
       }
-    } catch (e) {
-      console.warn('Failed to hydrate missing works from OpenAlex live', e);
+      const data = await resp.json();
+      if (Array.isArray(data.results)) {
+        resolved.push(...data.results);
+      }
     }
   }
 

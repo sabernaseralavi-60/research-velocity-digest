@@ -1,6 +1,7 @@
 """
 Configuration and settings module for AI Research Velocity Digest pipeline.
 Loads settings from environment variables or .env file with sensible defaults.
+No personal address is a default: set OPENALEX_POLITE_EMAIL / RECIPIENT_EMAIL in the environment.
 """
 
 import os
@@ -13,24 +14,35 @@ except ImportError:
     pass
 
 
+def _int_env(name: str, default: int) -> int:
+    raw = os.getenv(name, "")
+    try:
+        return int(raw) if raw.strip() else default
+    except ValueError:
+        return default
+
+
 @dataclass
 class PipelineConfig:
-    # OpenAlex API Polite Pool Email (grants 10 req/s instead of 1 req/s)
-    polite_email: str = os.getenv("OPENALEX_POLITE_EMAIL", "saber.naseralavi@gmail.com")
+    # OpenAlex API Polite Pool contact (grants the faster polite pool when set)
+    polite_email: str = field(default_factory=lambda: os.getenv("OPENALEX_POLITE_EMAIL", ""))
 
     # Time window for newly published papers (days)
-    lookback_days: int = int(os.getenv("LOOKBACK_DAYS", "7"))
+    lookback_days: int = field(default_factory=lambda: _int_env("LOOKBACK_DAYS", 7))
 
     # Minimum citation frequency from the recent paper batch to flag as trending
-    min_citation_velocity: int = int(os.getenv("MIN_CITATION_VELOCITY", "5"))
+    min_citation_velocity: int = field(default_factory=lambda: _int_env("MIN_CITATION_VELOCITY", 5))
 
     # Maximum trending papers to include in the email digest
-    top_n_papers: int = int(os.getenv("TOP_N_PAPERS", "15"))
+    top_n_papers: int = field(default_factory=lambda: _int_env("TOP_N_PAPERS", 15))
 
-    # Max recent papers to scan in the lookback window (controls API budget)
-    max_recent_papers_to_scan: int = int(os.getenv("MAX_RECENT_PAPERS_TO_SCAN", "300"))
+    # Max recent papers to scan per topic and run (controls API budget and database growth)
+    max_recent_papers_to_scan: int = field(default_factory=lambda: _int_env("MAX_RECENT_PAPERS_TO_SCAN", 300))
 
-    # AI & Computing subfields / concept IDs in OpenAlex
+    # Persistence: a Postgres URL (Neon) or a SQLite path; empty = local SQLite file
+    database_url: str = field(default_factory=lambda: os.getenv("DATABASE_URL", ""))
+
+    # AI & Computing subfields shown in the digest header
     subfields: List[str] = field(
         default_factory=lambda: [
             "Artificial Intelligence",
@@ -42,11 +54,8 @@ class PipelineConfig:
         ]
     )
 
-    # OpenAlex Concept IDs:
-    # C154945302 = Artificial Intelligence
-    # C119857082 = Machine Learning
-    # C108827166 = Computer Vision
-    # C127413603 = Pattern Recognition
+    # OpenAlex Concept IDs for the default AI topic:
+    # C154945302 = Artificial Intelligence, C119857082 = Machine Learning, C108827166 = Computer Vision
     concept_ids: List[str] = field(
         default_factory=lambda: [
             "C154945302",
@@ -56,19 +65,21 @@ class PipelineConfig:
     )
 
     # SMTP Email Dispatcher Settings
-    smtp_host: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
-    smtp_port: int = int(os.getenv("SMTP_PORT", "587"))
-    smtp_user: str = os.getenv("SMTP_USER", "")
-    smtp_password: str = os.getenv("SMTP_PASSWORD", "")  # 16-char App Password for Gmail
-    smtp_use_tls: bool = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
-    
-    # Destination recipient(s) for the weekly email digest
-    recipient_email: str = os.getenv("RECIPIENT_EMAIL", os.getenv("DIGEST_RECIPIENT", "saber.naseralavi@gmail.com"))
+    smtp_host: str = field(default_factory=lambda: os.getenv("SMTP_HOST", "smtp.gmail.com"))
+    smtp_port: int = field(default_factory=lambda: _int_env("SMTP_PORT", 587))
+    smtp_user: str = field(default_factory=lambda: os.getenv("SMTP_USER", ""))
+    smtp_password: str = field(default_factory=lambda: os.getenv("SMTP_PASSWORD", ""))  # Gmail app password
+    smtp_use_tls: bool = field(default_factory=lambda: os.getenv("SMTP_USE_TLS", "true").lower() == "true")
+
+    # Destination recipient for the digest (no default)
+    recipient_email: str = field(
+        default_factory=lambda: os.getenv("RECIPIENT_EMAIL", os.getenv("DIGEST_RECIPIENT", ""))
+    )
 
     # Output / export folder
-    output_dir: str = os.getenv("OUTPUT_DIR", "./output")
+    output_dir: str = field(default_factory=lambda: os.getenv("OUTPUT_DIR", "./output"))
 
 
 def get_config() -> PipelineConfig:
-    """Returns singleton pipeline configuration instance."""
+    """Returns a fresh pipeline configuration read from the current environment."""
     return PipelineConfig()

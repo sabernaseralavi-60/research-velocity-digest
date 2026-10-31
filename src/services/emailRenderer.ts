@@ -6,7 +6,7 @@ import { TrendingPaper, PipelineStats } from '../types/index.ts';
 export function renderEmailDigestHtml(
   papers: TrendingPaper[],
   stats: PipelineStats,
-  recipientEmail: string = 'saber.naseralavi@gmail.com'
+  recipientEmail: string = 'recipient@example.com'
 ): string {
   const cardsHtml = papers
     .map((paper, index) => {

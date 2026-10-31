@@ -133,14 +133,14 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
               className="inline-flex items-center space-x-1 px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs shrink-0"
             >
               <Send className="w-3 h-3" />
-              <span>Simulate Dispatch</span>
+              <span>Preview for this address</span>
             </button>
           </form>
 
           {testSent && (
             <div className="flex items-center space-x-1.5 text-emerald-400 font-medium text-xs animate-fade-in">
               <CheckCircle className="w-4 h-4" />
-              <span>Digest email payload rendered successfully for {targetEmail}!</span>
+              <span>Preview only: nothing was sent to {targetEmail}. Delivery is done by the scheduled job.</span>
             </div>
           )}
 

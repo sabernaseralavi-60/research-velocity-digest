@@ -1,0 +1,42 @@
+# STATE - research-velocity-digest+++ (web app factory)
+
+> The factory resumes from this file. Update it at every stage boundary and at session end.
+> Resume phrase: «کارخانه وب اپ: ادامه» (skill `webapp-factory`).
+
+## Where we are
+- Stage: 2-audit (intake done 2026-10-31)
+- Created: 2026-10-31   Last session: 2026-10-31
+- Depth: **deep** (scan score 7: auth/PII flags in mailer+config, >5k LOC, AI-labelled features)   reason: the spec asks for an autonomous, daily, DB-backed pipeline with user topics and an email dispatcher holding SMTP secrets.
+- Baseline: untouched first commit = **fbbf1e3** ("baseline: builder output (untouched)", .gitignore extended before commit with .aistudio/, *.docx, output/, *.db)   Builder: Google AI Studio (client-only Vite SPA + Python pipeline; there is NO server.ts despite the scan marker)
+
+## Inputs
+- Spec file: `AI Research Velocity Digest.docx` (ChatGPT guide, 370 paragraphs, kept out of git) -> register: `docs/factory/TRACE.md` (to write)
+- Owner constraints heard so far (dated):
+  - 2026-10-31: «کارخانه تولید اپ» -> web app factory.
+  - Spec section "two interesting topics": (1) user-chosen keywords / Google-Scholar-style labels (e.g. surrogate safety measures, household travel survey) instead of fixed AI subfields; the app must by itself, with no human and no local computer on, scan new papers every 24 h, store reference lists in a database, compute with the best professional function (also as a Python package) so a strong database grows daily and is the basis for newer indices. (2) Find "pre-awakening latent gems": old papers not yet cited but with Sleeping-Beauty-like potential (semantic search / embeddings; cannot embed all hundreds of thousands, so funnel).
+  - Spec: move the whole code to a given GitHub repo with minimum manual work.
+
+## Durable authorizations (user words, dated)  - nothing is assumed beyond this list
+- GitHub repo: https://github.com/sabernaseralavi-60/research-velocity-digest (given by owner 2026-10-31; public; empty at intake; push allowed: normal push at green points, no force)
+- Hosting target: Vercel + Neon (standing rule in CLAUDE.md applies only after the owner says "fix everything and run it"; free tier only) - not yet exercised this run.
+- Paid services / domain: none
+
+## Decisions (why, not only what)
+| Date | Decision | Alternatives | Reason |
+|---|---|---|---|
+| 2026-10-31 | Keep `AI Research Velocity Digest.docx` out of git (`*.docx` ignored) | commit it | third-party/ChatGPT text, contains owner e-mail, not code |
+| 2026-10-31 | Ignore `.aistudio/` | commit screenshots | builder artifacts (standard section 3) |
+| 2026-10-31 | Do not run `setup_github_sync.sh` (it does `git push --force`) | run as spec says | force-push is forbidden by factory rules; normal push instead; script to be fixed/removed in harden |
+| 2026-10-31 | git author set locally to owner name + email from account context | leave unset | commit needed an identity |
+
+## Open questions that really need the owner (few; everything else is decided and logged above)
+- Owner-only: SMTP app password / recipient for e-mail delivery (GitHub Secrets), if scheduled mail is wanted.
+
+## Next steps (ordered, each ends with a verifiable result)
+1. Audit v0 against 8 dimensions -> FINDINGS.md (clean install fails: ERESOLVE esbuild/vite; App.tsx:243 calls `renderEmailDigestHtml` without import; database.py / latent_gems.py not wired into pipeline.main).
+2. Harden: lockfile + install fix, wire the DB-backed daily ingest, user topics, honest labelling, tests, CI.
+3. Verify in a real browser (production build, mobile + desktop), then push to the owner's repo.
+
+## Verified vs not verified (short; full table in VERIFIED.md)
+- Verified (facts run on baseline clone): `python -m unittest pipeline.test_pipeline` 4 tests OK; `npm install` (plain) FAILS with ERESOLVE (peer vite@8 vs esbuild 0.25).
+- Not verified yet: build, TS lint, tsx tests, any live OpenAlex run, every number in the spec's "live screenshot" section.

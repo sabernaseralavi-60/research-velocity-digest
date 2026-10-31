@@ -1,195 +1,182 @@
 """
 OpenAlex Data Ingestion Module.
-Implements polite pool compliance, pagination, exponential backoff,
-and batch hydration for research paper metadata.
+Implements polite pool compliance, cursor pagination (complete windows, not "the newest N"),
+exponential backoff with Retry-After, and batch hydration for research paper metadata.
 """
 
 import json
 import logging
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
-import urllib.error
-from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, Iterator, List, Optional
 
 from .config import PipelineConfig
 from .models import RecentPaper
 
 logger = logging.getLogger("OpenAlexFetcher")
 
+RECENT_SELECT = "id,title,publication_date,publication_year,authorships,primary_topic,referenced_works,doi"
+HYDRATE_SELECT = (
+    "id,title,publication_year,publication_date,authorships,primary_topic,cited_by_count,doi,abstract_inverted_index"
+)
+
+
+def utc_today() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def concept_filter(concept_ids: List[str]) -> str:
+    return "concepts.id:" + "|".join(concept_ids)
+
+
+def search_filter(query: str) -> str:
+    """OpenAlex title+abstract search filter for a user topic (supports quotes, AND/OR)."""
+    cleaned = query.replace(",", " ").strip()
+    return f"title_and_abstract.search:{cleaned}"
+
 
 class OpenAlexClient:
     BASE_URL = "https://api.openalex.org/works"
+    RETRYABLE = {408, 425, 429, 500, 502, 503, 504}
 
-    def __init__(self, config: PipelineConfig):
+    def __init__(self, config: PipelineConfig, sleep=time.sleep):
         self.config = config
-        self.user_agent = f"AI-Research-Velocity-Digest/1.0 (mailto:{self.config.polite_email})"
+        contact = f" (mailto:{config.polite_email})" if config.polite_email else ""
+        self.user_agent = f"AI-Research-Velocity-Digest/2.0{contact}"
+        self._sleep = sleep
 
+    # ------------------------------------------------------------------ transport
     def _make_request(self, url: str, max_retries: int = 4) -> Dict[str, Any]:
-        """
-        Executes an HTTP GET with polite pool headers and exponential backoff retry.
-        """
+        """HTTP GET with backoff. urllib raises HTTPError for every non-2xx, so status handling lives there."""
         req = urllib.request.Request(
-            url,
-            headers={
-                "User-Agent": self.user_agent,
-                "Accept": "application/json",
-            },
+            url, headers={"User-Agent": self.user_agent, "Accept": "application/json"}
         )
-
         backoff = 1.0
+        last_error: Optional[Exception] = None
         for attempt in range(1, max_retries + 1):
             try:
-                with urllib.request.urlopen(req, timeout=25) as response:
-                    if response.status == 200:
-                        data = json.loads(response.read().decode("utf-8"))
-                        return data
-                    elif response.status == 429:
-                        logger.warning(f"Rate limited (429). Backing off for {backoff:.1f}s (attempt {attempt}/{max_retries})")
-                        time.sleep(backoff)
-                        backoff *= 2.0
-                    else:
-                        logger.error(f"HTTP error {response.status} fetching {url}")
-                        time.sleep(backoff)
-                        backoff *= 1.5
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    return json.loads(response.read().decode("utf-8"))
             except urllib.error.HTTPError as e:
-                logger.warning(f"HTTP error {e.code} on attempt {attempt}: {e.reason}")
-                if e.code == 429:
-                    time.sleep(backoff)
-                    backoff *= 2.0
-                else:
-                    time.sleep(backoff)
-                    backoff *= 1.5
-            except Exception as e:
-                logger.warning(f"Network error on attempt {attempt}: {str(e)}")
-                time.sleep(backoff)
+                last_error = e
+                if e.code not in self.RETRYABLE:
+                    raise RuntimeError(f"OpenAlex HTTP {e.code} (not retryable): {url[:160]}") from e
+                retry_after = e.headers.get("Retry-After") if e.headers else None
+                wait = float(retry_after) if retry_after and retry_after.isdigit() else backoff
+                logger.warning(f"HTTP {e.code} on attempt {attempt}/{max_retries}; waiting {wait:.1f}s")
+                self._sleep(wait)
                 backoff *= 2.0
+            except Exception as e:  # network, timeout, bad JSON
+                last_error = e
+                logger.warning(f"Network error on attempt {attempt}/{max_retries}: {e}")
+                self._sleep(backoff)
+                backoff *= 2.0
+        raise RuntimeError(f"Failed to fetch data from OpenAlex after {max_retries} attempts: {last_error}")
 
-        raise RuntimeError(f"Failed to fetch data from OpenAlex after {max_retries} attempts: {url}")
+    def _params(self, extra: Dict[str, str]) -> str:
+        params = dict(extra)
+        if self.config.polite_email:
+            params["mailto"] = self.config.polite_email
+        return urllib.parse.urlencode(params)
 
-    def fetch_recent_papers(self) -> List[RecentPaper]:
+    # ------------------------------------------------------------------ ingest
+    def iter_recent_papers(
+        self, topic_filter: str, start: datetime, end: datetime, cap: int
+    ) -> Iterator[RecentPaper]:
         """
-        Fetches newly published papers indexed within the past lookback_days
-        across Artificial Intelligence, Machine Learning, and Computer Vision subfields.
+        Yields papers (with references) published in [start, end], newest first, following the OpenAlex
+        cursor until the window is exhausted or `cap` papers were yielded. If the cap stops the run early the
+        caller can see it: `self.last_truncated`.
         """
-        end_date = datetime.utcnow()
-        start_date = end_date - timedelta(days=self.config.lookback_days)
-        start_str = start_date.strftime("%Y-%m-%d")
-        end_str = end_date.strftime("%Y-%m-%d")
-
-        logger.info(f"Ingesting recent papers published between {start_str} and {end_str}")
-
-        # Construct OpenAlex query filter
-        concept_filter = "|".join(self.config.concept_ids)
-        filters = [
-            f"from_publication_date:{start_str}",
-            f"to_publication_date:{end_str}",
-            f"concepts.id:{concept_filter}",
-            "has_references:true",
-        ]
-        filter_str = ",".join(filters)
-
-        # Select minimal payload fields for high throughput
-        select_fields = "id,title,publication_date,publication_year,authorships,primary_topic,referenced_works,doi"
-
-        recent_papers: List[RecentPaper] = []
-        page = 1
-        per_page = 100
-        scanned_count = 0
-
-        while scanned_count < self.config.max_recent_papers_to_scan:
-            params = {
-                "filter": filter_str,
-                "select": select_fields,
-                "sort": "publication_date:desc",
-                "per-page": str(per_page),
-                "page": str(page),
-                "mailto": self.config.polite_email,
-            }
-            url = f"{self.BASE_URL}?{urllib.parse.urlencode(params)}"
-
-            try:
-                data = self._make_request(url)
-            except Exception as err:
-                logger.error(f"Error fetching page {page}: {err}")
-                break
-
+        filters = ",".join(
+            [
+                f"from_publication_date:{start.strftime('%Y-%m-%d')}",
+                f"to_publication_date:{end.strftime('%Y-%m-%d')}",
+                topic_filter,
+                "has_references:true",
+            ]
+        )
+        cursor = "*"
+        yielded = 0
+        self.last_truncated = False
+        while True:
+            url = f"{self.BASE_URL}?" + self._params(
+                {
+                    "filter": filters,
+                    "select": RECENT_SELECT,
+                    "sort": "publication_date:desc",
+                    "per-page": "100",
+                    "cursor": cursor,
+                }
+            )
+            data = self._make_request(url)
             results = data.get("results", [])
-            if not results:
-                break
-
             for item in results:
-                ref_works = item.get("referenced_works", [])
-                if not ref_works:
+                refs = item.get("referenced_works") or []
+                if not refs:
                     continue
-
-                # Extract authors
-                authors = []
-                for auth in item.get("authorships", []):
-                    display_name = auth.get("author", {}).get("display_name")
-                    if display_name:
-                        authors.append(display_name)
-
-                # Extract primary topic
-                primary_topic = item.get("primary_topic") or {}
-                topic_name = primary_topic.get("display_name") or "Artificial Intelligence"
-
-                paper = RecentPaper(
+                primary = item.get("primary_topic") or {}
+                authors = [
+                    a.get("author", {}).get("display_name")
+                    for a in item.get("authorships", [])
+                    if a.get("author", {}).get("display_name")
+                ]
+                yield RecentPaper(
                     id=item.get("id", ""),
                     title=item.get("title") or "Untitled Work",
-                    publication_date=item.get("publication_date", ""),
-                    publication_year=item.get("publication_year") or end_date.year,
-                    primary_topic=topic_name,
+                    publication_date=item.get("publication_date") or "",
+                    publication_year=item.get("publication_year") or end.year,
+                    primary_topic=primary.get("display_name") or "Unclassified",
                     authors=authors[:5],
-                    referenced_works=ref_works,
+                    referenced_works=refs,
                     doi=item.get("doi"),
                 )
-                recent_papers.append(paper)
-                scanned_count += 1
+                yielded += 1
+                if yielded >= cap:
+                    self.last_truncated = True
+                    return
+            cursor = (data.get("meta") or {}).get("next_cursor")
+            if not results or not cursor:
+                return
+            self._sleep(0.12)
 
-                if scanned_count >= self.config.max_recent_papers_to_scan:
-                    break
+    def fetch_recent_papers(self) -> List[RecentPaper]:
+        """Default AI topic over the configured lookback window (kept for the CLI / analyzer)."""
+        end = utc_today()
+        start = end - timedelta(days=self.config.lookback_days)
+        logger.info(f"Ingesting recent papers published between {start:%Y-%m-%d} and {end:%Y-%m-%d}")
+        papers = list(
+            self.iter_recent_papers(
+                concept_filter(self.config.concept_ids), start, end, self.config.max_recent_papers_to_scan
+            )
+        )
+        logger.info(
+            f"Ingested {len(papers)} papers with references (cap reached: {self.last_truncated})"
+        )
+        return papers
 
-            # Polite pacing
-            time.sleep(0.12)
-            page += 1
-
-        logger.info(f"Ingested {len(recent_papers)} recent AI papers with references from past {self.config.lookback_days} days")
-        return recent_papers
-
+    # ------------------------------------------------------------------ hydrate
     def hydrate_papers_batch(self, openalex_work_ids: List[str]) -> List[Dict[str, Any]]:
-        """
-        Fetches detailed metadata for a list of target OpenAlex work IDs.
-        Chunks IDs into batches of 40 to avoid HTTP URI length limits.
-        """
+        """Fetches metadata for OpenAlex work ids, 40 per request (URL length / filter limits)."""
         if not openalex_work_ids:
             return []
-
-        logger.info(f"Hydrating detailed metadata for {len(openalex_work_ids)} candidate trending works")
         hydrated: List[Dict[str, Any]] = []
         chunk_size = 40
-
         for i in range(0, len(openalex_work_ids), chunk_size):
-            chunk = openalex_work_ids[i : i + chunk_size]
-            # Strip URLs if present, leaving canonical ID (e.g., W2741809807)
-            clean_ids = [cid.split("/")[-1] for cid in chunk]
-            id_filter = "|".join(clean_ids)
-
-            params = {
-                "filter": f"openalex_id:{id_filter}",
-                "per-page": str(chunk_size),
-                "select": "id,title,publication_year,publication_date,authorships,primary_topic,cited_by_count,doi,abstract_inverted_index",
-                "mailto": self.config.polite_email,
-            }
-            url = f"{self.BASE_URL}?{urllib.parse.urlencode(params)}"
-
+            chunk = [cid.split("/")[-1] for cid in openalex_work_ids[i : i + chunk_size]]
+            url = f"{self.BASE_URL}?" + self._params(
+                {
+                    "filter": "openalex_id:" + "|".join(chunk),
+                    "per-page": str(chunk_size),
+                    "select": HYDRATE_SELECT,
+                }
+            )
             try:
-                data = self._make_request(url)
-                hydrated.extend(data.get("results", []))
+                hydrated.extend(self._make_request(url).get("results", []))
             except Exception as e:
-                logger.error(f"Failed to hydrate batch chunk {i}: {e}")
-
-            time.sleep(0.12)
-
+                logger.error(f"Failed to hydrate batch starting at {i}: {e}")
+            self._sleep(0.12)
         return hydrated

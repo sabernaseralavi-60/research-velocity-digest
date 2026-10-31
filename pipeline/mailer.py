@@ -4,6 +4,7 @@ Supports Gmail SMTP (TLS 587 / SSL 465), local preview export,
 and multi-part (HTML + plaintext) formatting.
 """
 
+import html as _html
 import logging
 import os
 import smtplib
@@ -29,9 +30,11 @@ class EmailDispatcher:
         otherwise falls back to python string interpolation.
         """
         try:
-            from jinja2 import Template
+            from jinja2 import Environment
+
             template_content = self.template_path.read_text(encoding="utf-8")
-            template = Template(template_content)
+            # autoescape: titles/abstracts come from a public API and are untrusted (F-010)
+            template = Environment(autoescape=True).from_string(template_content)
             return template.render(report=report)
         except ImportError:
             logger.info("Jinja2 not installed; rendering using built-in template engine")
@@ -41,14 +44,18 @@ class EmailDispatcher:
         """Lightweight built-in renderer that requires zero 3rd-party dependencies."""
         paper_cards_html = []
         for i, paper in enumerate(report.trending_papers, start=1):
-            authors_str = ", ".join(paper.authors)
+            # every value below comes from a public API: escape it (F-010)
+            esc = _html.escape
+            authors_str = esc(", ".join(paper.authors))
+            title_e, topic_e = esc(paper.title), esc(paper.primary_topic)
+            scholar_e, openalex_e = esc(paper.scholar_url, quote=True), esc(paper.openalex_url, quote=True)
             abstract_html = (
                 f'<div style="font-size:13px;color:#334155;background:#f8fafc;padding:10px;border-radius:6px;margin:10px 0;border-left:2px solid #cbd5e1;">'
-                f'<strong>Key Takeaway:</strong> {paper.abstract}</div>'
+                f'<strong>Key Takeaway:</strong> {esc(paper.abstract)}</div>'
                 if paper.abstract else ""
             )
             doi_btn = (
-                f'<a href="{paper.doi_url}" style="display:inline-block;background:#f1f5f9;color:#334155;text-decoration:none;font-size:12px;font-weight:600;padding:8px 12px;border-radius:6px;border:1px solid #cbd5e1;margin-left:6px;" target="_blank">DOI</a>'
+                f'<a href="{esc(paper.doi_url or "", quote=True)}" style="display:inline-block;background:#f1f5f9;color:#334155;text-decoration:none;font-size:12px;font-weight:600;padding:8px 12px;border-radius:6px;border:1px solid #cbd5e1;margin-left:6px;" target="_blank">DOI</a>'
                 if paper.doi_url else ""
             )
 
@@ -57,14 +64,14 @@ class EmailDispatcher:
               <div style="margin-bottom:8px;">
                 <span style="background:#e2e8f0;color:#334155;font-weight:800;font-size:12px;padding:2px 8px;border-radius:4px;">#{i}</span>
                 <span style="background:#fef3c7;border:1px solid #fde68a;color:#92400e;font-weight:700;font-size:12px;padding:2px 8px;border-radius:4px;">⚡ +{paper.recent_citation_velocity} recent citations</span>
-                <span style="background:#e0f2fe;color:#0369a1;font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;">{paper.primary_topic} ({paper.publication_year})</span>
+                <span style="background:#e0f2fe;color:#0369a1;font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;">{topic_e} ({paper.publication_year})</span>
               </div>
-              <div style="font-size:16px;font-weight:700;color:#0f172a;margin:8px 0;">{paper.title}</div>
+              <div style="font-size:16px;font-weight:700;color:#0f172a;margin:8px 0;">{title_e}</div>
               <div style="font-size:12px;color:#64748b;margin-bottom:10px;">By {authors_str}</div>
               {abstract_html}
               <div style="margin-top:12px;">
-                <a href="{paper.scholar_url}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;font-size:12px;font-weight:700;padding:8px 16px;border-radius:6px;" target="_blank">Open in Google Scholar &rarr;</a>
-                <a href="{paper.openalex_url}" style="display:inline-block;background:#f1f5f9;color:#334155;text-decoration:none;font-size:12px;font-weight:600;padding:8px 12px;border-radius:6px;border:1px solid #cbd5e1;margin-left:6px;" target="_blank">OpenAlex</a>
+                <a href="{scholar_e}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;font-size:12px;font-weight:700;padding:8px 16px;border-radius:6px;" target="_blank">Open in Google Scholar &rarr;</a>
+                <a href="{openalex_e}" style="display:inline-block;background:#f1f5f9;color:#334155;text-decoration:none;font-size:12px;font-weight:600;padding:8px 12px;border-radius:6px;border:1px solid #cbd5e1;margin-left:6px;" target="_blank">OpenAlex</a>
                 {doi_btn}
               </div>
             </div>

@@ -1,0 +1,53 @@
+name: Daily citation database update
+
+on:
+  schedule:
+    # Every day 04:30 UTC. GitHub may delay scheduled runs by minutes under load.
+    - cron: '30 4 * * *'
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: 'Optional: add/refresh one focused topic (OpenAlex title+abstract query)'
+        required: false
+        default: ''
+      days:
+        description: 'Optional: override the ingest span in days'
+        required: false
+        default: ''
+
+concurrency:
+  group: daily-ingest
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Check database secret
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::Repository secret DATABASE_URL (Neon connection string) is not set"
+            exit 1
+          fi
+      - name: Ingest and compute indices
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          OPENALEX_POLITE_EMAIL: ${{ secrets.OPENALEX_POLITE_EMAIL }}
+          TOPIC: ${{ github.event.inputs.topic }}
+          DAYS: ${{ github.event.inputs.days }}
+        run: |
+          ARGS=""
+          if [ -n "$TOPIC" ]; then ARGS="$ARGS --topic \"$TOPIC\""; fi
+          if [ -n "$DAYS" ]; then ARGS="$ARGS --days $DAYS"; fi
+          eval python -m pipeline.daily $ARGS

@@ -23,6 +23,8 @@ def sanitize_paper_title(title: str) -> str:
     cleaned = re.sub(r"\$([^$]+)\$", r"\1", cleaned)
     # Replace non-breaking spaces and linebreaks
     cleaned = re.sub(r"[\r\n\t]+", " ", cleaned).strip()
+    # Quote characters would break the exact-phrase query ("" around a quoted title)
+    cleaned = re.sub(r'["“”]', "", cleaned).strip()
     # Strip trailing punctuation, periods, ellipsis
     cleaned = re.sub(r"(\.{3,}|[.,:;…]+)$", "", cleaned).strip()
     return cleaned

@@ -11,6 +11,7 @@ import { SleepingBeautySection } from './components/SleepingBeautySection.tsx';
 import { LatentGemsSection } from './components/LatentGemsSection.tsx';
 import { TrendingPaper, SleepingBeautyPaper, LatentGemPaper, PipelineStats, RawPaper } from './types/index.ts';
 import { fetchRecentPapersOpenAlex, hydrateWorksOpenAlex, getAllCandidateHydratedWorks } from './services/openAlexService.ts';
+import { renderEmailDigestHtml } from './services/emailRenderer.ts';
 import {
   buildInvertedReferenceIndex,
   compileTrendingPapers,
@@ -36,9 +37,10 @@ export default function App() {
     'Household Travel Survey',
     'Traffic Conflict',
   ]);
-  const [politeEmail, setPoliteEmail] = useState('saber.naseralavi@gmail.com');
+  const [politeEmail, setPoliteEmail] = useState('');
   const [useLiveNetwork, setUseLiveNetwork] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
+  const [runError, setRunError] = useState<string | null>(null);
 
   const [trendingPapers, setTrendingPapers] = useState<TrendingPaper[]>([]);
   const [sleepingBeauties, setSleepingBeauties] = useState<SleepingBeautyPaper[]>([]);
@@ -76,6 +78,7 @@ export default function App() {
 
   const executePipeline = useCallback(async () => {
     setIsRunning(true);
+    setRunError(null);
     const startTime = Date.now();
 
     try {
@@ -135,8 +138,11 @@ export default function App() {
       );
 
       // Step 6: Screen for Un-awakened Latent Gems matching user custom Scholar labels
-      const allHistoricalCatalog = getAllCandidateHydratedWorks();
-      const detectedLatentGems = screenLatentGems(allHistoricalCatalog, customKeywords);
+      // The only historical catalogue available in the browser is the synthetic fixture, so live mode
+      // must not screen it: real latent gems come from the daily database, never from invented papers.
+      const detectedLatentGems = useLiveNetwork
+        ? []
+        : screenLatentGems(getAllCandidateHydratedWorks(), customKeywords);
 
       // Step 7: Compute pipeline statistics
       const computedStats = calculatePipelineStats(
@@ -155,6 +161,7 @@ export default function App() {
       setStats(computedStats);
     } catch (err) {
       console.error('Pipeline execution error:', err);
+      setRunError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsRunning(false);
     }
@@ -181,6 +188,16 @@ export default function App() {
         {/* Tab 1: Live Pipeline Dashboard */}
         {activeTab === 'dashboard' && (
           <div>
+            {!useLiveNetwork && (
+              <div role="status" className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-xs text-amber-200">
+                Demo data: the papers below are a synthetic fixture for demonstration. Switch to "Live OpenAlex API" for real papers.
+              </div>
+            )}
+            {runError && (
+              <div role="alert" className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-xs text-red-200">
+                Live run failed: {runError}. No data was substituted.
+              </div>
+            )}
             {/* Top Metrics Cards */}
             <PipelineMetricsBar stats={stats} />
 

@@ -53,7 +53,7 @@ cp .env.example .env
 
 | Variable | Description | Default |
 |---|---|---|
-| `OPENALEX_POLITE_EMAIL` | Your email address (grants 10 req/s polite pool access) | `saber.naseralavi@gmail.com` |
+| `OPENALEX_POLITE_EMAIL` | Your email address (grants 10 req/s polite pool access) | `you@example.com` |
 | `LOOKBACK_DAYS` | Window for newly published papers | `7` |
 | `MIN_CITATION_VELOCITY` | Minimum citations in recent batch to flag paper | `5` |
 | `TOP_N_PAPERS` | Max trending papers to include in digest | `15` |

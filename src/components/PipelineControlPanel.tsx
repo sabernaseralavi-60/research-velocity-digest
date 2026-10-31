@@ -199,7 +199,7 @@ export const PipelineControlPanel: React.FC<PipelineControlPanelProps> = ({
                   : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
               }`}
             >
-              Benchmark (Instant)
+              Demo data (synthetic)
             </button>
             <button
               onClick={() => setUseLiveNetwork(true)}
@@ -212,6 +212,11 @@ export const PipelineControlPanel: React.FC<PipelineControlPanelProps> = ({
               Live OpenAlex API
             </button>
           </div>
+          <p className="mt-2 text-[10px] leading-snug text-slate-500">
+            {useLiveNetwork
+              ? 'Real papers fetched now from OpenAlex. If the request fails you will see an error, never substitute data.'
+              : 'Synthetic fixture for demonstration only: the papers, authors and counts are invented and are not findings.'}
+          </p>
         </div>
       </div>
 

@@ -71,7 +71,7 @@ export const SetupGuideModal: React.FC<SetupGuideModalProps> = ({ isOpen, onClos
               </div>
               <div className="flex justify-between text-slate-300">
                 <span className="text-emerald-400">OPENALEX_POLITE_EMAIL</span>
-                <span className="text-slate-400">saber.naseralavi@gmail.com</span>
+                <span className="text-slate-400">you@example.com</span>
               </div>
             </div>
           </div>

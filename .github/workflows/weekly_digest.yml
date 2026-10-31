@@ -45,7 +45,7 @@ jobs:
 
       - name: Execute Pipeline
         env:
-          OPENALEX_POLITE_EMAIL: ${{ secrets.OPENALEX_POLITE_EMAIL || 'saber.naseralavi@gmail.com' }}
+          OPENALEX_POLITE_EMAIL: ${{ secrets.OPENALEX_POLITE_EMAIL }}
           SMTP_HOST: 'smtp.gmail.com'
           SMTP_PORT: '587'
           SMTP_USER: ${{ secrets.GMAIL_USER }}

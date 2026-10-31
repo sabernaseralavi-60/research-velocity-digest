@@ -208,7 +208,7 @@ jobs:
       - run: pip install -r requirements.txt
       - name: Execute Inverted Citation Digest
         env:
-          OPENALEX_POLITE_EMAIL: \${{ secrets.OPENALEX_POLITE_EMAIL || 'saber.naseralavi@gmail.com' }}
+          OPENALEX_POLITE_EMAIL: \${{ secrets.OPENALEX_POLITE_EMAIL }}
           SMTP_USER: \${{ secrets.GMAIL_USER }}
           SMTP_PASSWORD: \${{ secrets.GMAIL_APP_PASSWORD }}
           RECIPIENT_EMAIL: \${{ secrets.RECIPIENT_EMAIL }}
