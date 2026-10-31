@@ -24,7 +24,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
-      contents: read
+      contents: write   # only used to publish the SQLite snapshot as a release asset
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SNAPSHOT_TAG: data-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -32,13 +35,21 @@ jobs:
           python-version: '3.11'
           cache: pip
       - run: pip install -r requirements.txt
-      - name: Check database secret
+      # Two storage modes. With the DATABASE_URL secret (Neon Postgres) the database lives there.
+      # Without it the database is one SQLite file that is restored from, and published back to,
+      # the rolling release "data-latest" (OpenAlex metadata is CC0; no data is committed to git).
+      - name: Restore previous SQLite snapshot
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
+          mkdir -p output
           if [ -z "$DATABASE_URL" ]; then
-            echo "::error::Repository secret DATABASE_URL (Neon connection string) is not set"
-            exit 1
+            if gh release download "$SNAPSHOT_TAG" -p research_velocity.db.gz -D output; then
+              gunzip -f output/research_velocity.db.gz
+              ls -l output/research_velocity.db
+            else
+              echo "No previous snapshot: this run starts a new database (30-day backfill)."
+            fi
           fi
       - name: Ingest and compute indices
         env:
@@ -52,3 +63,14 @@ jobs:
           if [ -n "$TOPIC" ]; then ARGS="$ARGS --topic \"$TOPIC\""; fi
           if [ -n "$DAYS" ]; then ARGS="$ARGS --days $DAYS"; fi
           eval python -m pipeline.daily $ARGS
+      - name: Publish SQLite snapshot
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            python -c "import sqlite3; c=sqlite3.connect('output/research_velocity.db'); c.execute('VACUUM'); c.close()"
+            gzip -9 -f -k output/research_velocity.db
+            ls -l output/research_velocity.db.gz
+            gh release view "$SNAPSHOT_TAG" >/dev/null 2>&1 || gh release create "$SNAPSHOT_TAG"               --title "Database snapshot (updated daily by CI)"               --notes "Rolling SQLite snapshot of the OpenAlex citation database. Replaced on every run; do not depend on its history."
+            gh release upload "$SNAPSHOT_TAG" output/research_velocity.db.gz --clobber
+          fi

@@ -47,18 +47,23 @@ export async function openDb(): Promise<Db> {
       },
     };
   } else {
-    // local development / tests only: Node's built-in SQLite (never used on Vercel, where DATABASE_URL is set)
+    // local app and tests: Node built-in SQLite (never used on Vercel, where DATABASE_URL is set)
     const specifier = 'node:sqlite';
     const { DatabaseSync } = (await import(specifier)) as typeof import('node:sqlite');
     const file = url || process.env.SQLITE_PATH || 'output/research_velocity.db';
-    const db = new DatabaseSync(file);
+    // One short-lived connection per query: the daily snapshot download replaces the file while the
+    // local server keeps running, and Windows cannot replace a file that an open connection holds.
     cached = {
       async query(text, params = []) {
-        const stmt = db.prepare(text);
-        const isRead = /^\s*select/i.test(text);
-        if (isRead) return stmt.all(...(params as never[])) as Row[];
-        stmt.run(...(params as never[]));
-        return [];
+        const db = new DatabaseSync(file);
+        try {
+          const stmt = db.prepare(text);
+          if (/^\s*select/i.test(text)) return stmt.all(...(params as never[])) as Row[];
+          stmt.run(...(params as never[]));
+          return [];
+        } finally {
+          db.close();
+        }
       },
     };
   }
