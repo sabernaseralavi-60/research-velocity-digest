@@ -11,6 +11,7 @@ Designed for a free scheduler (GitHub Actions cron) with the database on Neon: n
 import argparse
 import json
 import logging
+import os
 import sys
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -61,10 +62,22 @@ def ingest_topic(store: Store, client: OpenAlexClient, topic: Dict[str, Any], cf
     run_id = uuid.uuid4().hex[:12]
     store.start_run(run_id, topic["topic_id"])
     try:
-        papers = list(client.iter_recent_papers(topic_filter(topic, cfg), start, end, cap))
-        new_papers, new_edges = store.save_papers(topic["topic_id"], papers)
-        store.finish_run(run_id, "ok", len(papers), new_papers, new_edges, client.last_truncated)
-        return {"seen": len(papers), "new_papers": new_papers, "new_edges": new_edges, "truncated": client.last_truncated, "span_days": span}
+        flt = topic_filter(topic, cfg)
+        seen = new_papers = new_edges = 0
+        truncated = False
+        if topic["kind"] == "concepts":
+            # a broad topic has far more papers per day than the cap: sample EVERY day (cap per day) so each
+            # window is covered evenly, instead of "the newest N papers" which would all be from one day
+            ranges = [(end - timedelta(days=i), end - timedelta(days=i)) for i in range(span + 1)]
+        else:
+            ranges = [(start, end)]
+        for lo, hi in ranges:
+            papers = list(client.iter_recent_papers(flt, lo, hi, cap))
+            n_p, n_e = store.save_papers(topic["topic_id"], papers)
+            seen, new_papers, new_edges = seen + len(papers), new_papers + n_p, new_edges + n_e
+            truncated = truncated or client.last_truncated
+        store.finish_run(run_id, "ok", seen, new_papers, new_edges, truncated)
+        return {"seen": seen, "new_papers": new_papers, "new_edges": new_edges, "truncated": truncated, "span_days": span}
     except Exception as e:
         store.finish_run(run_id, "error", 0, 0, 0, False, str(e))
         raise
@@ -88,6 +101,9 @@ def run_daily(cfg: PipelineConfig, store: Store, days: Optional[int] = None, onl
         except Exception as e:
             failures += 1
             logger.error(f"   topic {topic['topic_id']} failed: {e}")
+    retain = int(os.getenv("RETAIN_DAYS", "90"))
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=retain)).strftime("%Y-%m-%d")
+    logger.info(f"pruned (older than {retain} days): {store.prune(cutoff)}")
     logger.info(f"totals: {store.totals()}")
     return 1 if failures else 0
 

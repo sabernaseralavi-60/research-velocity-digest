@@ -1,7 +1,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Header } from './components/Header.tsx';
 import { PipelineMetricsBar } from './components/PipelineMetricsBar.tsx';
-import { PipelineControlPanel } from './components/PipelineControlPanel.tsx';
+import { PipelineControlPanel, DataSource } from './components/PipelineControlPanel.tsx';
+import { LiveDatabasePanel } from './components/LiveDatabasePanel.tsx';
+import {
+  DbDigest,
+  DbStatus,
+  DbTopic,
+  digestToStats,
+  fetchDbDigest,
+  fetchDbStatus,
+  fetchDbTopics,
+} from './services/dbApi.ts';
 import { TrendingPapersTable } from './components/TrendingPapersTable.tsx';
 import { AlgorithmExplainer } from './components/AlgorithmExplainer.tsx';
 import { CodeExplorer } from './components/CodeExplorer.tsx';
@@ -38,9 +48,37 @@ export default function App() {
     'Traffic Conflict',
   ]);
   const [politeEmail, setPoliteEmail] = useState('');
-  const [useLiveNetwork, setUseLiveNetwork] = useState(false);
+  // 'db' = the daily citation database (real data), 'live' = OpenAlex right now, 'demo' = synthetic fixture
+  const [source, setSource] = useState<DataSource>('db');
+  const useLiveNetwork = source === 'live';
+  const [dbStatus, setDbStatus] = useState<DbStatus | null>(null);
+  const [dbTopics, setDbTopics] = useState<DbTopic[]>([]);
+  const [topicId, setTopicId] = useState('');
+  const [dbWindow, setDbWindow] = useState(7);
+  const [dbDigest, setDbDigest] = useState<DbDigest | null>(null);
+  const [dbError, setDbError] = useState<string | null>(null);
+  const [dbReady, setDbReady] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
+
+  const loadDbMeta = useCallback(async () => {
+    try {
+      const [status, topics] = await Promise.all([fetchDbStatus(), fetchDbTopics()]);
+      setDbStatus(status);
+      setDbTopics(topics);
+      setTopicId((cur) => (cur && topics.some((t) => t.topic_id === cur) ? cur : topics[0]?.topic_id || ''));
+      setDbReady(topics.length > 0);
+      if (topics.length === 0) setSource((s) => (s === 'db' ? 'demo' : s));
+    } catch (err) {
+      setDbReady(false);
+      setDbError(`Database not available: ${err instanceof Error ? err.message : String(err)}`);
+      setSource((s) => (s === 'db' ? 'demo' : s));
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadDbMeta();
+  }, [loadDbMeta]);
 
   const [trendingPapers, setTrendingPapers] = useState<TrendingPaper[]>([]);
   const [sleepingBeauties, setSleepingBeauties] = useState<SleepingBeautyPaper[]>([]);
@@ -82,6 +120,26 @@ export default function App() {
     const startTime = Date.now();
 
     try {
+      if (source === 'db') {
+        if (!topicId) return;
+        setDbError(null);
+        try {
+          const digest = await fetchDbDigest(topicId, dbWindow);
+          setDbDigest(digest);
+          setTrendingPapers(digest.trending);
+          setSleepingBeauties(digest.sleeping_beauties);
+          setLatentGems(digest.latent_gems);
+          setStats(digestToStats(digest));
+        } catch (err) {
+          setDbDigest(null);
+          setTrendingPapers([]);
+          setSleepingBeauties([]);
+          setLatentGems([]);
+          setDbError(err instanceof Error ? err.message : String(err));
+        }
+        return;
+      }
+
       // Step 1: Ingest newly published papers in the recent window
       const recentPapers = await fetchRecentPapersOpenAlex(lookbackDays, politeEmail, useLiveNetwork);
 
@@ -165,7 +223,7 @@ export default function App() {
     } finally {
       setIsRunning(false);
     }
-  }, [lookbackDays, minVelocity, topN, selectedSubfields, customKeywords, politeEmail, useLiveNetwork]);
+  }, [lookbackDays, minVelocity, topN, selectedSubfields, customKeywords, politeEmail, source, useLiveNetwork, topicId, dbWindow]);
 
   // Execute pipeline once on initial mount
   useEffect(() => {
@@ -188,15 +246,34 @@ export default function App() {
         {/* Tab 1: Live Pipeline Dashboard */}
         {activeTab === 'dashboard' && (
           <div>
-            {!useLiveNetwork && (
+            {source === 'demo' && (
               <div role="status" className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-xs text-amber-200">
-                Demo data: the papers below are a synthetic fixture for demonstration. Switch to "Live OpenAlex API" for real papers.
+                Demo data: the papers below are a synthetic fixture for demonstration, not findings.
+                {dbError ? ` ${dbError}.` : ' Switch to "Database (daily)" or "OpenAlex now" for real papers.'}
               </div>
             )}
             {runError && (
               <div role="alert" className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-xs text-red-200">
                 Live run failed: {runError}. No data was substituted.
               </div>
+            )}
+            {source === 'live' && !runError && (
+              <div role="status" className="mb-4 rounded-lg border border-slate-700 bg-slate-900 px-4 py-2 text-xs text-slate-300">
+                Live from OpenAlex: about 50 of the newest papers, one request. Latent gems and a growing history need the daily database.
+              </div>
+            )}
+            {source === 'db' && dbStatus && (
+              <LiveDatabasePanel
+                status={dbStatus}
+                topics={dbTopics}
+                topicId={topicId}
+                setTopicId={setTopicId}
+                windowDays={dbWindow}
+                setWindowDays={setDbWindow}
+                digest={dbDigest}
+                digestError={dbError}
+                onTopicsChanged={() => void loadDbMeta()}
+              />
             )}
             {/* Top Metrics Cards */}
             <PipelineMetricsBar stats={stats} />
@@ -216,14 +293,20 @@ export default function App() {
               onRemoveCustomKeyword={handleRemoveCustomKeyword}
               politeEmail={politeEmail}
               setPoliteEmail={setPoliteEmail}
-              useLiveNetwork={useLiveNetwork}
-              setUseLiveNetwork={setUseLiveNetwork}
+              source={source}
+              setSource={setSource}
+              dbAvailable={dbReady}
               isRunning={isRunning}
               onRunPipeline={executePipeline}
             />
 
             {/* Un-awakened Latent Sleeping Beauties / Dormant Gems Discovery */}
             <LatentGemsSection gems={latentGems} activeKeywords={customKeywords} />
+            {source === 'db' && dbDigest && latentGems.length === 0 && (
+              <p className="mb-6 text-xs text-slate-500">
+                No latent-gem candidates for this topic and window yet (they need older, rarely cited works that recent papers cite; the 30-day window searches deepest).
+              </p>
+            )}
 
             {/* Sleeping Beauties Resurgence Section */}
             <SleepingBeautySection papers={sleepingBeauties} />

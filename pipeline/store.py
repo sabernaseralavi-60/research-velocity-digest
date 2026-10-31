@@ -242,6 +242,29 @@ class Store:
         )[0]
         return {"papers": papers, "edges": edges, "unique_cited": unique}
 
+    def prune(self, before_date: str) -> Dict[str, int]:
+        """Deletes papers/edges published before `before_date` (windows are at most 30 days, so older edges are
+        never read). Keeps the free Neon tier (0.5 GB) from filling up: ~10k edges/day for the broad topic."""
+        old = "SELECT work_id FROM papers WHERE publication_date < ?"
+        counts = {
+            "edges": self._all(f"SELECT COUNT(*) FROM edges WHERE source_id IN ({old})", (before_date,))[0][0],
+            "papers": self._all("SELECT COUNT(*) FROM papers WHERE publication_date < ?", (before_date,))[0][0],
+        }
+        self._exec(f"DELETE FROM edges WHERE source_id IN ({old})", (before_date,))
+        self._exec(f"DELETE FROM paper_topics WHERE work_id IN ({old})", (before_date,))
+        self._exec("DELETE FROM papers WHERE publication_date < ?", (before_date,))
+        return {k: int(v) for k, v in counts.items()}
+
+    def topic_coverage(self, topic_id: str, since: str) -> Dict[str, Any]:
+        """Which publication dates the stored papers of this topic really cover inside the window."""
+        row = self._all(
+            """SELECT MIN(p.publication_date), MAX(p.publication_date), COUNT(DISTINCT p.publication_date)
+               FROM papers p JOIN paper_topics t ON t.work_id = p.work_id
+               WHERE t.topic_id = ? AND p.publication_date >= ?""",
+            (topic_id, since),
+        )[0]
+        return {"earliest_paper_date": row[0], "latest_paper_date": row[1], "days_with_papers": int(row[2] or 0)}
+
     def velocity(self, topic_id: str, since: str, min_count: int = 1, limit: int = 5000) -> List[Tuple[str, int]]:
         """(target_id, number of distinct topic papers published >= since that cite it), highest first."""
         rows = self._all(

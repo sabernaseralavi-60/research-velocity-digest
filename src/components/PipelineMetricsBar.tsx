@@ -70,8 +70,8 @@ export const PipelineMetricsBar: React.FC<PipelineMetricsBarProps> = ({ stats })
           <Clock className="w-4 h-4" />
         </div>
         <div>
-          <div className="text-base font-extrabold text-slate-200 font-mono">{stats.executionTimeMs}ms</div>
-          <div className="text-[10px] uppercase tracking-wider text-slate-400 font-medium">Pipeline Time</div>
+          <div className="text-base font-extrabold text-slate-200 font-mono">{stats.precomputed ? 'daily' : `${stats.executionTimeMs}ms`}</div>
+          <div className="text-[10px] uppercase tracking-wider text-slate-400 font-medium">{stats.precomputed ? 'Computed by job' : 'Pipeline Time'}</div>
         </div>
       </div>
     </div>

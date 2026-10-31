@@ -106,6 +106,18 @@ class TestStore(unittest.TestCase):
         self.assertEqual(self.s.list_topics(), [])
         self.assertEqual(len(self.s.list_topics(active_only=False)), 1)
 
+    def test_prune_removes_only_old_rows(self):
+        self.s.save_papers("t", [paper("OLD", "2026-01-05", ["R1", "R2"]), paper("NEW", "2026-10-30", ["R1"])])
+        self.assertEqual(self.s.prune("2026-06-01"), {"edges": 2, "papers": 1})
+        self.assertEqual(self.s.totals()["papers"], 1)
+        self.assertEqual(self.s.velocity("t", "2026-01-01"), [("R1", 1)])
+        self.assertEqual(self.s.prune("2026-06-01"), {"edges": 0, "papers": 0})  # idempotent
+
+    def test_coverage_reports_real_date_range(self):
+        self.s.save_papers("t", [paper("A", "2026-10-20", ["R1"]), paper("B", "2026-10-30", ["R1"])])
+        self.assertEqual(self.s.topic_coverage("t", "2026-10-01"),
+                         {"earliest_paper_date": "2026-10-20", "latest_paper_date": "2026-10-30", "days_with_papers": 2})
+
     def test_empty_database_is_handled(self):
         self.assertEqual(self.s.velocity("t", "2026-01-01"), [])
         self.assertEqual(self.s.topic_window_stats("t", "2026-01-01"), {"papers": 0, "edges": 0, "unique_cited": 0})
@@ -188,8 +200,8 @@ class TestInsights(unittest.TestCase):
 
 
 class TestFetcher(unittest.TestCase):
-    def client(self):
-        return OpenAlexClient(PipelineConfig(polite_email=""), sleep=lambda _s: None)
+    def client(self, key=""):
+        return OpenAlexClient(PipelineConfig(polite_email="", openalex_api_key=key), sleep=lambda _s: None)
 
     def page(self, ids, nxt):
         return {"results": [{"id": f"https://openalex.org/{i}", "title": i, "publication_date": "2026-10-30", "publication_year": 2026,
@@ -197,7 +209,7 @@ class TestFetcher(unittest.TestCase):
                 "meta": {"next_cursor": nxt}}
 
     def test_cursor_pagination_collects_every_page(self):
-        c = self.client()
+        c = self.client(key="k")
         pages = [self.page(["a", "b"], "c1"), self.page(["c"], None)]
         with mock.patch.object(c, "_make_request", side_effect=pages):
             got = list(c.iter_recent_papers("concepts.id:X", TODAY, TODAY, cap=100))
@@ -205,11 +217,33 @@ class TestFetcher(unittest.TestCase):
         self.assertFalse(c.last_truncated)
 
     def test_cap_sets_truncated_flag(self):
-        c = self.client()
+        c = self.client(key="k")
         with mock.patch.object(c, "_make_request", side_effect=[self.page(["a", "b", "c"], "c1")]):
             got = list(c.iter_recent_papers("concepts.id:X", TODAY, TODAY, cap=2))
         self.assertEqual(len(got), 2)
         self.assertTrue(c.last_truncated)
+
+    def test_without_a_key_it_pages_with_page_numbers_not_cursor(self):
+        c = self.client()
+        full = self.page([f"p{i}" for i in range(100)], None)
+        last = self.page(["z"], None)
+        with mock.patch.object(c, "_make_request", side_effect=[full, last]) as m:
+            got = list(c.iter_recent_papers("concepts.id:X", TODAY, TODAY, cap=500))
+        self.assertEqual(len(got), 101)
+        urls = [call.args[0] for call in m.call_args_list]
+        self.assertIn("page=1", urls[0])
+        self.assertIn("page=2", urls[1])
+        self.assertNotIn("cursor=", urls[0] + urls[1])
+
+    def test_api_key_is_never_shown_in_errors(self):
+        c = self.client(key="SECRETKEY")
+        err = urllib.error.HTTPError("u", 401, "Unauthorized", {}, None)
+        with mock.patch("urllib.request.urlopen", side_effect=[err]):
+            with self.assertRaises(RuntimeError) as ctx:
+                c._make_request("https://api.openalex.org/works?x=1&api_key=SECRETKEY&mailto=a@b.c")
+        self.assertNotIn("SECRETKEY", str(ctx.exception))
+        self.assertNotIn("a@b.c", str(ctx.exception))
+        self.assertIn("OPENALEX_API_KEY", str(ctx.exception))
 
     def test_429_is_retried_and_404_is_not(self):
         c = self.client()

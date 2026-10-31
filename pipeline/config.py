@@ -27,6 +27,10 @@ class PipelineConfig:
     # OpenAlex API Polite Pool contact (grants the faster polite pool when set)
     polite_email: str = field(default_factory=lambda: os.getenv("OPENALEX_POLITE_EMAIL", ""))
 
+    # OpenAlex API key (free at openalex.org/settings/api): without one all requests from a network share a
+    # small daily budget, which a scheduled job on shared CI IPs can exhaust
+    openalex_api_key: str = field(default_factory=lambda: os.getenv("OPENALEX_API_KEY", ""))
+
     # Time window for newly published papers (days)
     lookback_days: int = field(default_factory=lambda: _int_env("LOOKBACK_DAYS", 7))
 

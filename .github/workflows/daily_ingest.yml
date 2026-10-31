@@ -44,6 +44,7 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           OPENALEX_POLITE_EMAIL: ${{ secrets.OPENALEX_POLITE_EMAIL }}
+          OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
           TOPIC: ${{ github.event.inputs.topic }}
           DAYS: ${{ github.event.inputs.days }}
         run: |

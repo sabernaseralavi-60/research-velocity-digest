@@ -79,6 +79,9 @@ export interface PipelineStats {
   trendingThreshold: number;
   trendingFoundCount: number;
   executionTimeMs: number;
+  /** true when the numbers were computed earlier by the daily job (no run time to show) */
+  precomputed?: boolean;
+  thresholdFallback?: boolean;
 }
 
 export interface PipelineConfig {

@@ -154,6 +154,7 @@ def compute_topic_insights(
                 "trending_threshold": threshold,
                 "trending_found_count": len(trending),
                 "threshold_fallback": fallback,
+                **store.topic_coverage(tid, since),
                 "works_hydrated_this_run": hydrated_now,
             },
             "trending": trending,

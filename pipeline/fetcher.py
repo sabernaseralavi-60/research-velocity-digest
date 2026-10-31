@@ -6,6 +6,7 @@ exponential backoff with Retry-After, and batch hydration for research paper met
 
 import json
 import logging
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -63,7 +64,12 @@ class OpenAlexClient:
             except urllib.error.HTTPError as e:
                 last_error = e
                 if e.code not in self.RETRYABLE:
-                    raise RuntimeError(f"OpenAlex HTTP {e.code} (not retryable): {url[:160]}") from e
+                    hint = (
+                        " - OpenAlex budget or key problem: set OPENALEX_API_KEY (free, openalex.org/settings/api)"
+                        if e.code in (401, 402, 403)
+                        else ""
+                    )
+                    raise RuntimeError(f"OpenAlex HTTP {e.code} (not retryable){hint}: {self._redact(url)}") from e
                 retry_after = e.headers.get("Retry-After") if e.headers else None
                 wait = float(retry_after) if retry_after and retry_after.isdigit() else backoff
                 logger.warning(f"HTTP {e.code} on attempt {attempt}/{max_retries}; waiting {wait:.1f}s")
@@ -80,7 +86,13 @@ class OpenAlexClient:
         params = dict(extra)
         if self.config.polite_email:
             params["mailto"] = self.config.polite_email
+        if self.config.openalex_api_key:
+            params["api_key"] = self.config.openalex_api_key
         return urllib.parse.urlencode(params)
+
+    @staticmethod
+    def _redact(url: str) -> str:
+        return re.sub(r"(api_key|mailto)=[^&]+", r"\1=***", url)[:200]
 
     # ------------------------------------------------------------------ ingest
     def iter_recent_papers(
@@ -99,17 +111,21 @@ class OpenAlexClient:
                 "has_references:true",
             ]
         )
+        # OpenAlex only allows cursor paging past page 1 WITH an API key; without one use page= (max 10,000 records)
+        use_cursor = bool(self.config.openalex_api_key)
         cursor = "*"
+        page = 1
         yielded = 0
         self.last_truncated = False
         while True:
+            paging = {"cursor": cursor} if use_cursor else {"page": str(page)}
             url = f"{self.BASE_URL}?" + self._params(
                 {
                     "filter": filters,
                     "select": RECENT_SELECT,
                     "sort": "publication_date:desc",
                     "per-page": "100",
-                    "cursor": cursor,
+                    **paging,
                 }
             )
             data = self._make_request(url)
@@ -138,9 +154,17 @@ class OpenAlexClient:
                 if yielded >= cap:
                     self.last_truncated = True
                     return
-            cursor = (data.get("meta") or {}).get("next_cursor")
-            if not results or not cursor:
-                return
+            if use_cursor:
+                cursor = (data.get("meta") or {}).get("next_cursor")
+                if not results or not cursor:
+                    return
+            else:
+                if len(results) < 100:
+                    return
+                page += 1
+                if page * 100 > 10_000:  # basic paging stops at 10,000 records: say so instead of looping
+                    self.last_truncated = True
+                    return
             self._sleep(0.12)
 
     def fetch_recent_papers(self) -> List[RecentPaper]:

@@ -1,6 +1,8 @@
 import React from 'react';
 import { Play, Sliders, Calendar, Zap, Mail, Layers, Globe2, RefreshCw } from 'lucide-react';
 
+export type DataSource = 'db' | 'demo' | 'live';
+
 interface PipelineControlPanelProps {
   lookbackDays: number;
   setLookbackDays: (days: number) => void;
@@ -15,8 +17,9 @@ interface PipelineControlPanelProps {
   onRemoveCustomKeyword: (kw: string) => void;
   politeEmail: string;
   setPoliteEmail: (email: string) => void;
-  useLiveNetwork: boolean;
-  setUseLiveNetwork: (use: boolean) => void;
+  source: DataSource;
+  setSource: (s: DataSource) => void;
+  dbAvailable: boolean;
   isRunning: boolean;
   onRunPipeline: () => void;
 }
@@ -46,12 +49,14 @@ export const PipelineControlPanel: React.FC<PipelineControlPanelProps> = ({
   onRemoveCustomKeyword,
   politeEmail,
   setPoliteEmail,
-  useLiveNetwork,
-  setUseLiveNetwork,
+  source,
+  setSource,
+  dbAvailable,
   isRunning,
   onRunPipeline,
 }) => {
   const [newKeywordInput, setNewKeywordInput] = React.useState('');
+  const fromDb = source === 'db';
 
   const handleAddKeyword = (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,7 +98,7 @@ export const PipelineControlPanel: React.FC<PipelineControlPanelProps> = ({
             ) : (
               <>
                 <Play className="w-4 h-4 fill-white text-white" />
-                <span>Run Inverted Index</span>
+                <span>{fromDb ? 'Reload from database' : 'Run Inverted Index'}</span>
               </>
             )}
           </button>
@@ -101,6 +106,7 @@ export const PipelineControlPanel: React.FC<PipelineControlPanelProps> = ({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 pt-5">
+        {!fromDb && (<>
         {/* Lookback Window */}
         <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
@@ -119,7 +125,8 @@ export const PipelineControlPanel: React.FC<PipelineControlPanelProps> = ({
             step="1"
             value={lookbackDays}
             onChange={(e) => setLookbackDays(Number(e.target.value))}
-            className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
+            disabled={fromDb}
+            className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer disabled:opacity-40 accent-blue-500"
           />
           <div className="flex justify-between text-[10px] text-slate-500 mt-1 font-mono">
             <span>3d (Fast)</span>
@@ -146,7 +153,8 @@ export const PipelineControlPanel: React.FC<PipelineControlPanelProps> = ({
             step="1"
             value={minVelocity}
             onChange={(e) => setMinVelocity(Number(e.target.value))}
-            className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+            disabled={fromDb}
+            className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer disabled:opacity-40 accent-amber-500"
           />
           <div className="flex justify-between text-[10px] text-slate-500 mt-1 font-mono">
             <span>1 (Broad)</span>
@@ -173,7 +181,8 @@ export const PipelineControlPanel: React.FC<PipelineControlPanelProps> = ({
             step="1"
             value={topN}
             onChange={(e) => setTopN(Number(e.target.value))}
-            className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+            disabled={fromDb}
+            className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer disabled:opacity-40 accent-emerald-500"
           />
           <div className="flex justify-between text-[10px] text-slate-500 mt-1 font-mono">
             <span>5</span>
@@ -182,6 +191,7 @@ export const PipelineControlPanel: React.FC<PipelineControlPanelProps> = ({
           </div>
         </div>
 
+        </>)}
         {/* Data Source & Polite Pool */}
         <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 flex flex-col justify-between">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-1.5">
@@ -191,36 +201,37 @@ export const PipelineControlPanel: React.FC<PipelineControlPanelProps> = ({
             </span>
           </div>
           <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setUseLiveNetwork(false)}
-              className={`flex-1 text-[11px] py-1.5 rounded-lg font-medium transition-all ${
-                !useLiveNetwork
-                  ? 'bg-blue-600/30 text-blue-300 border border-blue-500/40 font-bold'
-                  : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
-              }`}
-            >
-              Demo data (synthetic)
-            </button>
-            <button
-              onClick={() => setUseLiveNetwork(true)}
-              className={`flex-1 text-[11px] py-1.5 rounded-lg font-medium transition-all ${
-                useLiveNetwork
-                  ? 'bg-purple-600/30 text-purple-300 border border-purple-500/40 font-bold'
-                  : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
-              }`}
-            >
-              Live OpenAlex API
-            </button>
+            {([
+              ['db', 'Database (daily)', 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 font-bold'],
+              ['live', 'OpenAlex now', 'bg-purple-600/30 text-purple-300 border border-purple-500/40 font-bold'],
+              ['demo', 'Demo (synthetic)', 'bg-blue-600/30 text-blue-300 border border-blue-500/40 font-bold'],
+            ] as const).map(([key, text, active]) => (
+              <button
+                key={key}
+                onClick={() => setSource(key)}
+                disabled={key === 'db' && !dbAvailable}
+                aria-pressed={source === key}
+                className={`flex-1 text-[11px] py-1.5 rounded-lg font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                  source === key ? active : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
+                }`}
+              >
+                {text}
+              </button>
+            ))}
           </div>
           <p className="mt-2 text-[10px] leading-snug text-slate-500">
-            {useLiveNetwork
-              ? 'Real papers fetched now from OpenAlex. If the request fails you will see an error, never substitute data.'
-              : 'Synthetic fixture for demonstration only: the papers, authors and counts are invented and are not findings.'}
+            {source === 'db'
+              ? 'Real papers from the citation database that the daily job keeps growing. Window and cut-off are fixed by that job.'
+              : source === 'live'
+                ? 'Real papers fetched now from OpenAlex (about 50 newest, one request). If it fails you see an error, never substitute data.'
+                : 'Synthetic fixture for demonstration only: the papers, authors and counts are invented and are not findings.'}
+            {!dbAvailable && ' The database is not reachable on this server.'}
           </p>
         </div>
       </div>
 
-      {/* Google Scholar Labels & Custom Research Keywords */}
+      {/* Client-side labels apply to the demo and OpenAlex-now modes; the database uses its own topics */}
+      {!fromDb && (
       <div className="mt-5 pt-4 border-t border-slate-800/80 space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="text-xs text-slate-300 font-bold flex items-center space-x-1.5">
@@ -289,6 +300,7 @@ export const PipelineControlPanel: React.FC<PipelineControlPanelProps> = ({
           })}
         </div>
       </div>
+      )}
     </div>
   );
 };

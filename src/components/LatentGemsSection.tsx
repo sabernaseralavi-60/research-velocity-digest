@@ -16,7 +16,7 @@ export const LatentGemsSection: React.FC<LatentGemsSectionProps> = ({ gems, acti
   title={${paper.title}},
   author={${paper.authors.join(' and ')}},
   year={${paper.publication_year}},
-  note={Un-awakened Latent Gem Discovery},
+  note={Latent gem candidate (heuristic ranking)},
   url={${paper.scholar_url}}
 }`;
     navigator.clipboard.writeText(bibtex);
@@ -39,21 +39,21 @@ export const LatentGemsSection: React.FC<LatentGemsSectionProps> = ({ gems, acti
           <div>
             <div className="flex items-center space-x-2">
               <h3 className="text-base font-extrabold text-white tracking-tight">
-                Undiscovered Sleeping Beauties (Pre-Awakening Opportunities)
+                Latent Gems (Pre-Awakening Candidates)
               </h3>
               <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded-full">
-                Zero Citations &bull; High Latent Value
+                Few citations &bull; lexical match
               </span>
             </div>
             <p className="text-xs text-slate-300">
-              Historical works with near-zero citations that mathematically match today&apos;s unsolved research frontiers in your selected labels
+              Older, rarely cited works that recent papers of the selected topic already cite. Ranked by a heuristic (lexical similarity, age, obscurity): a reading list of candidates, not a prediction.
             </p>
           </div>
         </div>
 
         <div className="flex items-center space-x-2 text-xs font-mono text-amber-300 bg-amber-950/60 px-3 py-1 rounded-lg border border-amber-800/60">
           <Compass className="w-3.5 h-3.5 text-amber-400" />
-          <span>{gems.length} Dormant Blue-Ocean Works</span>
+          <span>{gems.length} {gems.length === 1 ? 'candidate' : 'candidates'}</span>
         </div>
       </div>
 
