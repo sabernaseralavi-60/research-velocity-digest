@@ -44,3 +44,33 @@ Rows marked `implicit` were forgotten by the spec and added by the factory.
 | I-4 | Input validation and rate limit on API; bounded OpenAlex usage | open | |
 | I-5 | Cron endpoint/job idempotent (re-run the same day does not double-count edges) | open | |
 | I-6 | Backup/export of the database (CSV/JSON snapshot) | open | |
+
+## Status after the 2026-10-31 session (evidence in VERIFIED.md)
+| ID | Status | Evidence / what remains |
+|---|---|---|
+| R-A1 | met (sampled) | per-day ingest, real coverage dates shown; broad topic is a 300/day sample (stated in UI) |
+| R-A2 | met | scholar link quote bug fixed, unit test |
+| R-A3, R-A4 | met | polite pool + API key; backoff rewritten (HTTPError handling, Retry-After), 4 tests |
+| R-A5, R-A6, R-A7 | met | e2e on production build; BibTeX/Scholar/OpenAlex buttons unchanged from v0 (not re-tested individually) |
+| R-B1 | met | preview modal kept; wording says preview only |
+| R-B2 | changed | no fake send: labelled preview only (F-011) |
+| R-B3 | partial | escaping tested; SMTP never run (no credentials) |
+| R-B4 | partial | weekly workflow kept; new daily workflow written, not yet run in GitHub (needs secrets) |
+| R-C1, R-C2 | partial | pages unchanged from v0; Dockerfile added; text claims not re-audited line by line |
+| R-C3 | met | CLI run live |
+| R-D1 | met (heuristic) | hand-checked formula; no backtest |
+| R-D2 | partial | dashboard yes; not in the e-mail digest yet |
+| R-D3 | partial | funnel steps 1,3,4 on real data (26 and 33 candidates); 2-3 hop ancestral walk not built |
+| R-D4 | partial | lexical TF-IDF only, labelled; embeddings are future work |
+| R-E1 | met | topics in DB, dashboard form (token), CLI flag, seed file |
+| R-E2 | partial | workflow + DB written; not proven in the cloud |
+| R-E3 | met locally | SQLite run measured; Postgres path unverified |
+| R-E4 | partial | `pipeline` package importable; no PyPI packaging (not requested) |
+| R-F1 | met | pushed to the owner's repo (normal push), CI green |
+| R-F2 | met | Dockerfile builds in CI |
+| R-F3 | met | 31 python + 13 TS + 14 browser tests |
+| I-1 | met | token on writes, tested |
+| I-2 | met | no personal address default in code (it remains in git history of the baseline commit) |
+| I-3 | met | coverage/sampling/fallback notices |
+| I-5 | met | idempotent upserts, tested |
+| I-4, I-6 | open | per-instance rate limit only; no export endpoint |

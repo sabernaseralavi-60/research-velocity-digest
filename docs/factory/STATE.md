@@ -32,10 +32,23 @@
 ## Open questions that really need the owner (few; everything else is decided and logged above)
 - Owner-only: SMTP app password / recipient for e-mail delivery (GitHub Secrets), if scheduled mail is wanted.
 
+## Decisions added later on 2026-10-31
+| Decision | Reason |
+|---|---|
+| Database = Neon Postgres in production, SQLite locally/CI; one portable SQL schema | free, same code path |
+| Daily job in GitHub Actions (Python); dashboard + read API on Vercel | spec: no local PC, free; Python is the compute core |
+| Without OPENALEX_API_KEY use `page=` paging | OpenAlex needs a key for cursor paging past page 1 (HTTP 401 observed) |
+| Broad AI topic sampled per day (300/day); retention 90 days | measured 42 MB per 31 days; Neon free tier is 0.5 GB |
+| Latent-gem similarity = lexical TF-IDF, 1 hop, labelled so | no embedding dependency; embedding 250M papers is infeasible |
+| UI default source = database; demo + in-browser live kept, labelled | honesty |
+| Cloud resources NOT created yet | CLAUDE.md authorises Neon + Vercel only after the owner says "fix everything and run it" for this project |
+
+## Stage now
+Hardened, pushed (CI green incl. browser e2e), verified on a local production build with real OpenAlex data. 5-ship is blocked on the owner's go-ahead.
+
 ## Next steps (ordered, each ends with a verifiable result)
-1. Audit v0 against 8 dimensions -> FINDINGS.md (clean install fails: ERESOLVE esbuild/vite; App.tsx:243 calls `renderEmailDigestHtml` without import; database.py / latent_gems.py not wired into pipeline.main).
-2. Harden: lockfile + install fix, wire the DB-backed daily ingest, user topics, honest labelling, tests, CI.
-3. Verify in a real browser (production build, mobile + desktop), then push to the owner's repo.
+1. Owner: authorise Neon + Vercel (free) + GitHub secrets with the standing phrase, and create the free OpenAlex key (openalex.org/settings/api) -> then: create Neon, set secrets, run the workflow once, deploy, run e2e on the live URL, record URL in WEBAPPS.md.
+2. Not done yet: e-mail digest from the DB snapshot (sleeping beauties + gems), 2-3 hop ancestral walk, Persian/RTL UI decision, Postgres path verification (happens in step 1).
 
 ## Verified vs not verified (short; full table in VERIFIED.md)
 - Verified (facts run on baseline clone): `python -m unittest pipeline.test_pipeline` 4 tests OK; `npm install` (plain) FAILS with ERESOLVE (peer vite@8 vs esbuild 0.25).
