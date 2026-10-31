@@ -1,0 +1,14 @@
+[Unit]
+Description=AI Research Velocity Digest Weekly Runner
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/opt/ai-paper-digest
+EnvironmentFile=/opt/ai-paper-digest/.env
+ExecStart=/usr/bin/python3 -m pipeline.main
+
+[Install]
+WantedBy=multi-user.target

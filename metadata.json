@@ -1,0 +1,6 @@
+{
+  "name": "AI Research Velocity Digest",
+  "description": "Automated inverted-indexing pipeline that detects trending AI/ML/CV papers published or heavily cited in the past 7 days and delivers curated email digests with direct Google Scholar links.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

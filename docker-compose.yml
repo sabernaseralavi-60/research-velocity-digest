@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  ai-paper-digest:
+    build: .
+    container_name: ai_velocity_digest
+    env_file:
+      - .env
+    volumes:
+      - ./output:/app/output
+    command: ["--days", "7", "--min-citations", "5", "--output-html", "output/digest_preview.html"]
