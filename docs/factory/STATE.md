@@ -68,3 +68,9 @@ Hardened, pushed (CI green incl. browser e2e), verified on a local production bu
 - Verified: workflow run 41211010626 green (cloud: 9,068 papers, 299,256 edges, 3 topics, 6 snapshots; asset 11.6 MB); snapshot downloaded and served locally, dashboard screenshot shows the cloud data, no console errors.
 - Not verified: the scheduled (cron) run itself; second-day incremental run on the cloud; keyless OpenAlex over many days on shared runner IPs; Chrome startup tab (owner sets it in Chrome settings).
 - Public web app (Vercel + Neon) stays on hold until the Vercel fair-use block is resolved.
+
+## 2026-10-31 (evening) - owner: "do everything yourself, I do not want to interfere"
+- Second cloud run (41212665351, 33 s) restored the previous snapshot and ingested incrementally: ai-research seen 914 / new 1, DB 9,068 -> 9,069 papers, runs 3 -> 6 (incremental path VERIFIED).
+- Workflow: one retry after 10 min added. Chrome: the dashboard URL appended to the Desktop shortcut "Seyedsaber - Chrome.lnk" (profile 4) via `scripts/install_chrome_tab.ps1` (undo with -Remove); Chrome settings untouched because startup prefs are integrity-protected and a policy would replace the owner's own startup tabs. Start-menu shortcut (ProgramData) needs admin: not changed.
+- Startup shortcut run by hand: sync + server OK.
+- Only owner-only item left: free OpenAlex key (needs the owner's e-mail/account) - optional hardening; runs work keyless so far.
